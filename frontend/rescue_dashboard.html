@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Rescue Tracker</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-brand"><span>🐾</span><span>Rescue Tracker</span></div>
+  <div class="hdr-r">
+    <button class="msw on" id="tab-m" onclick="switchMode('manager')">Manager</button>
+    <button class="msw" id="tab-d" onclick="switchMode('driver')">Driver</button>
+    <button class="msw" id="theme-toggle" onclick="toggleTheme()">🌙</button>
+    <button class="msw logout" id="tab-logout" style="display:none" onclick="logoutMgr()">Logout</button>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+<div id="mgr-view" class="mgr"></div>
+<div id="drv-view" style="display:none"></div>
+
+<div class="modal-bg" id="pwd-modal" style="display:none">
+  <div class="modal">
+    <h3>🔒 Manager Access</h3>
+    <p>Enter manager password.</p>
+    <input type="password" id="pwd-input" placeholder="••••••" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:9px;font-size:14px" onkeypress="if(event.key==='Enter')checkPwd()">
+    <div class="modal-btns" style="margin-top:12px">
+      <button class="modal-cancel" onclick="closePwdModal()">Cancel</button>
+      <button class="modal-ok" onclick="checkPwd()">Login</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="file-input" accept="image/*" capture="environment" style="display:none">
+
+<!-- Small UI helpers: theme toggle + modal close (kept lightweight) -->
+<script>
+  function closePwdModal(){
+    const m = document.getElementById('pwd-modal');
+    if(m) m.style.display='none';
+    // Prefer calling switchMode if available, otherwise set driver view directly
+    if(typeof switchMode === 'function') return switchMode('driver');
+    const tabm=document.getElementById('tab-m');
+    const tabd=document.getElementById('tab-d');
+    if(tabm) tabm.className='msw';
+    if(tabd) tabd.className='msw on';
+    const mv=document.getElementById('mgr-view');
+    const dv=document.getElementById('drv-view');
+    if(mv) mv.style.display='none';
+    if(dv) dv.style.display='';
+  }
+
+  function toggleTheme(){
+    const root = document.documentElement;
+    const isDark = root.classList.toggle('dark');
+    try{ localStorage.setItem('theme',''+(isDark?'dark':'light')); }catch(e){}
+    const btn = document.getElementById('theme-toggle');
+    if(btn) btn.textContent = isDark ? '☀️' : '🌙';
+  }
+
+  (function applyStoredTheme(){
+    try{
+      const t = localStorage.getItem('theme');
+      if(t==='dark'){
+        document.documentElement.classList.add('dark');
+        const btn = document.getElementById('theme-toggle'); if(btn) btn.textContent='☀️';
+      }
+    }catch(e){}
+  })();
+</script>
+
+<script type="text/template" id="main-script">
+const DRIVERS=["Venkatesh","Yogi","Ramesh","Chandrashekhar","Vignesh","Shashidhar","Rajashekhar","Arun","Surya","Sachin"];
+const STATUS={idle:{l:"Idle",bg:"#F1F5F9",co:"#64748B",dot:"#94A3B8"},enroute:{l:"En Route",bg:"#EFF6FF",co:"#1D4ED8",dot:"#3B82F6"},onscene:{l:"On Scene",bg:"#FEF3C7",co:"#92400E",dot:"#F59E0B"},rescued:{l:"Rescued",bg:"#F0FDF4",co:"#166534",dot:"#22C55E"},returning:{l:"Returning",bg:"#F5F3FF",co:"#5B21B6",dot:"#8B5CF6"},completed:{l:"Completed",bg:"#ECFDF5",co:"#065F46",dot:"#10B981"}};
+const FLOW=[{k:"enroute",ico:"🚚",l:"En Route"},{k:"onscene",ico:"📍",l:"On Scene"},{k:"rescued",ico:"🐾",l:"Rescued"},{k:"returning",ico:"↩️",l:"Returning"},{k:"completed",ico:"✅",l:"Completed"}];
+const ANIMALS=["Dog","Cat","Bird","Cow","Goat","Snake","Monkey","Other"];
+const CONDITIONS=["Critical","Injured","Stable","Healthy"];
+const PWD="2289";
+const API="http://localhost:3001/api";
+
+function mkState(){return{status:"idle",vehicle:"",fuel:{start:"",end:"",photo:""},animal:{type:"",gender:"",neutered:"",condition:"",remarks:""},photos:[],tasks:[],history:[]};}
+let DATA={};DRIVERS.forEach(d=>DATA[d]=mkState());
+let mode="manager",mgrAuth=false,selDrv=null,activeDrv=DRIVERS[0],photoFor=null;
+
+async function loadData(){try{const r=await fetch(API+"/data");if(r.ok){const d=await r.json();DATA=d||{};DRIVERS.forEach(dr=>{if(!DATA[dr])DATA[dr]=mkState();})}}catch(e){}}
+async function saveData(driver){try{await fetch(API+"/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({driver,state:DATA[driver]})})}catch(e){}}
+
+function toast(title,sub){const w=document.getElementById("toasts");const t=document.createElement("div");t.className="toast";t.innerHTML=`<b>${title}</b>${sub}`;w.appendChild(t);setTimeout(()=>t.remove(),4000);}
+
+function dispatch(driver){
+  const rn=document.getElementById("dp-rn").value.trim();
+  const rp=document.getElementById("dp-rp").value.trim();
+  const ml=document.getElementById("dp-ml").value.trim();
+  const at=document.getElementById("dp-at").value.trim();
+  const tt=document.getElementById("dp-tt").value.trim();
+  const nt=document.getElementById("dp-nt").value.trim();
+  if(!rn||!at||!tt){alert("Fill reporter name, animal type, and task type!");return;}
+  const task={id:Date.now(),rn,rp,ml,at,tt,nt,t:Date.now(),done:false};
+  DATA[driver].tasks.push(task);
+  DATA[driver].history.push({st:"idle",t:Date.now(),l:`📋 Task: ${tt}`});
+  saveData(driver);
+  document.getElementById("dp-rn").value="";document.getElementById("dp-rp").value="";document.getElementById("dp-ml").value="";document.getElementById("dp-at").value="";document.getElementById("dp-tt").value="";document.getElementById("dp-nt").value="";
+  toast("Task Dispatched",`→ ${driver}`);render();
+}
+
+function setSt(drv,ns){
+  const t=Date.now();
+  if(ns==="idle"){const tasks=DATA[drv].tasks;DATA[drv]=mkState();DATA[drv].tasks=tasks.filter(tk=>!tk.done);}
+  else{DATA[drv].status=ns;DATA[drv].history.push({st:ns,t,l:"Status → "+STATUS[ns].l});if(ns==="enroute"&&!DATA[drv].startTime)DATA[drv].startTime=t;if(ns==="completed")DATA[drv].endTime=t;}
+  saveData(drv);render();
+}
+
+function completeTask(drv){
+  const pending=DATA[drv].tasks.filter(t=>!t.done);
+  if(!pending.length)return;
+  if(!DATA[drv].fuel.start||!DATA[drv].fuel.end){toast("Error","Fill fuel data first!");return;}
+  pending[0].done=true;pending[0].doneAt=Date.now();
+  DATA[drv].history.push({st:"completed",t:Date.now(),l:`✅ Done: ${pending[0].tt}`});
+  const next=DATA[drv].tasks.filter(t=>!t.done);
+  if(next.length){toast(drv,`Next: ${next[0].tt}`);}else{DATA[drv].status="completed";DATA[drv].endTime=Date.now();toast(drv,"All done! 🎉");}
+  saveData(drv);render();
+}
+
+function saveDrvData(drv){
+  DATA[drv].animal.remarks=document.getElementById("remarks").value;
+  DATA[drv].fuel.start=document.getElementById("fuel-start").value;
+  DATA[drv].fuel.end=document.getElementById("fuel-end").value;
+  DATA[drv].animal.type=document.getElementById("animal-type").value;
+  DATA[drv].animal.gender=document.getElementById("animal-gender").value;
+  DATA[drv].animal.neutered=document.getElementById("animal-neutered").value;
+  DATA[drv].animal.condition=document.getElementById("animal-condition").value;
+  saveData(drv);toast(drv,"Saved!");
+}
+
+function openPhotoUpload(drv,type){photoFor=drv+"_"+type;document.getElementById("file-input").click();}
+document.getElementById("file-input").addEventListener("change",function(){
+  const f=this.files[0];if(!f||!photoFor)return;
+  const rd=new FileReader();rd.onload=e=>{
+    const [drv,type]=photoFor.split("_");
+    if(type==="fuel"){DATA[drv].fuel.photo=e.target.result;toast(drv,"Fuel photo saved");}
+    else{DATA[drv].photos.push({d:e.target.result,t:Date.now()});toast(drv,"Photo saved");}
+    saveData(drv);render();
+  };rd.readAsDataURL(f);
+});
+
+function switchMode(m){
+  if(m==="manager"&&!mgrAuth){document.getElementById("pwd-modal").style.display="flex";document.getElementById("pwd-input").focus();return;}
+  mode=m;
+  document.getElementById("tab-m").className="msw"+(m==="manager"?" on":"");
+  document.getElementById("tab-d").className="msw"+(m==="driver"?" on":"");
+  document.getElementById("mgr-view").style.display=m==="manager"?"":"none";
+  document.getElementById("drv-view").style.display=m==="driver"?"":"none";
+  render();
+}
+function checkPwd(){const pwd=document.getElementById("pwd-input").value;if(pwd===PWD){mgrAuth=true;document.getElementById("pwd-modal").style.display="none";switchMode("manager");toast("Manager","✅ Authenticated");}else{toast("Error","Wrong password!");document.getElementById("pwd-input").value="";}}
+function logoutMgr(){mgrAuth=false;document.getElementById("tab-logout").style.display="none";switchMode("driver");toast("Manager","Logged out");}
+
+function renderMgr(){
+  const active=DRIVERS.filter(d=>DATA[d].status!=="idle"&&DATA[d].status!=="completed").length;
+  const tasks=DRIVERS.reduce((a,d)=>a+DATA[d].tasks.filter(t=>!t.done).length,0);
+  const html=`<div class="stats"><div class="scard"><div class="scard-ico">🚑</div><div class="scard-lbl">Active</div><div class="scard-val" style="color:#1D4ED8">${active}</div></div><div class="scard"><div class="scard-ico">📋</div><div class="scard-lbl">Pending</div><div class="scard-val" style="color:#92400E">${tasks}</div></div><div class="scard"><div class="scard-ico">📊</div><div class="scard-lbl">Total</div><div class="scard-val" style="color:#1B4332">${DRIVERS.length}</div></div></div><div class="dgrid">${DRIVERS.map(dr=>{const r=DATA[dr];const s=STATUS[r.status];const pt=r.tasks.filter(t=>!t.done).length;return `<div class="dcard${selDrv===dr?" sel":""}" onclick="selDrv=${selDrv===dr?'null':`'${dr}'`};render()"><div class="dc-top">🚐</div><div class="dc-body"><div class="dc-name">${dr}</div><div class="dc-vehicle">${r.vehicle||"No vehicle"}</div><div class="dc-status" style="background:${s.bg};color:${s.co}"><span class="dot" style="background:${s.dot}"></span>${s.l}</div>${pt>0?`<div style="margin-top:6px;font-size:11px;color:#92400E;font-weight:700">📋 ${pt}</div>`:""}</div></div>`;}).join("")}</div>${selDrv?`<div class="lay"><div></div><div class="panel"><div class="ph"><div class="ph-ico">🚐</div><div><div class="ph-name">${selDrv}</div></div></div><div class="pb"><div class="sec"><div class="sec-t">⛽ Fuel Data</div><div class="info-row"><b>Start:</b> ${DATA[selDrv].fuel.start||"Not logged"} L</div><div class="info-row"><b>End:</b> ${DATA[selDrv].fuel.end||"Not logged"} L</div>${DATA[selDrv].fuel.start&&DATA[selDrv].fuel.end?`<div class="info-row" style="color:#92400E;font-weight:700"><b>Consumed:</b> ${(DATA[selDrv].fuel.start-DATA[selDrv].fuel.end).toFixed(2)} L</div>`:""}</div>${DATA[selDrv].fuel.photo?`<div style="margin-bottom:12px"><img src="${DATA[selDrv].fuel.photo}" style="width:100%;height:120px;object-fit:cover;border-radius:9px;border:1px solid var(--border)"><div style="font-size:11px;color:#166534;font-weight:700;margin-top:4px;padding:6px;background:#F0FDF4;border-radius:6px;text-align:center">✅ Fuel photo</div></div>`:`<div style="font-size:11px;color:#92400E;font-weight:700;margin-top:8px;padding:8px;background:var(--apale);border-radius:6px;text-align:center">⏳ Pending fuel photo</div>`}<div class="sec"><div class="sec-t">🐾 Animal Info</div>${DATA[selDrv].animal.type?`<div class="info-row"><b>Type:</b> ${DATA[selDrv].animal.type}</div>`:""}${DATA[selDrv].animal.gender?`<div class="info-row"><b>Gender:</b> ${DATA[selDrv].animal.gender}</div>`:""}${DATA[selDrv].animal.neutered?`<div class="info-row"><b>Neutered:</b> ${DATA[selDrv].animal.neutered}</div>`:""}${DATA[selDrv].animal.condition?`<div class="info-row"><b>Condition:</b> ${DATA[selDrv].animal.condition}</div>`:""}${DATA[selDrv].animal.remarks?`<div class="info-row"><b>Remarks:</b> ${DATA[selDrv].animal.remarks}</div>`:""}${DATA[selDrv].photos.length>0?`<div class="photo-grid">${DATA[selDrv].photos.map(p=>`<img src="${p.d}" alt="">`).join("")}</div>`:""}</div><div style="border-top:1px solid var(--border);margin:12px 0"></div><div class="sec"><div class="sec-t">📋 Dispatch</div><div class="form-group"><label>Reporter Name</label><input type="text" id="dp-rn" placeholder="Who reported?"></div><div class="form-group"><label>Reporter Phone</label><input type="tel" id="dp-rp" placeholder="+91"></div><div class="form-group"><label>Google Maps Link</label><input type="text" id="dp-ml" placeholder="maps link"></div><div class="form-group"><label>Animal Type</label><select id="dp-at"><option value="">Select...</option>${ANIMALS.map(a=>`<option>${a}</option>`).join("")}</select></div><div class="form-group"><label>Task Type</label><select id="dp-tt"><option value="">Select...</option><option>Rescue</option><option>Medicine</option><option>Sterilization</option><option>Other</option></select></div><div class="form-group"><label>Notes</label><input type="text" id="dp-nt" placeholder="Additional notes"></div><button class="btn btn-green" onclick="dispatch('${selDrv}')">🚀 Send</button></div></div></div></div>`:""}`;
+  document.getElementById("mgr-view").innerHTML=html;
+  document.getElementById("tab-logout").style.display="";
+}
+
+function renderDrv(){
+  const r=DATA[activeDrv];const pending=r.tasks.filter(t=>!t.done);const active=pending[0]||null;
+  const html=`<div class="drv"><select class="sel" onchange="activeDrv=this.value;render()">${DRIVERS.map(d=>`<option value="${d}"${d===activeDrv?" selected":""}>${d}</option>`).join("")}</select>${active?`<div class="task-card"><div class="task-type">${active.tt}</div>${active.rn?`<div class="task-row"><span class="task-ico">👤</span><span><b>Reporter:</b> ${active.rn}</span></div>`:""}${active.rp?`<div class="task-row"><span class="task-ico">📞</span><span><b>Phone:</b> ${active.rp}</span></div>`:""}${active.at?`<div class="task-row"><span class="task-ico">🐾</span><span><b>Animal:</b> ${active.at}</span></div>`:""}${active.nt?`<div class="task-row"><span class="task-ico">📝</span><span><b>Notes:</b> ${active.nt}</span></div>`:""}<div class="task-action">${active.ml?`<a href="${active.ml}" target="_blank" class="maps-link">🗺 Maps</a>`:"<div></div>"}${active.rp?`<a href="tel:${active.rp}" class="call-link">📞 Call</a>`:"<div></div>"}</div></div><button class="btn btn-green" style="margin-bottom:12px" onclick="completeTask('${activeDrv}')">✅ Complete</button>`:`<div class="notask"><div class="notask-ico">⏳</div><div class="notask-t">No task</div></div>`}<div class="status-btns">${FLOW.map(f=>`<button class="status-btn${r.status===f.k?" on":""}" style="${r.status===f.k?`border-color:${STATUS[f.k].dot};background:${STATUS[f.k].bg};color:${STATUS[f.k].co}`:""}" onclick="setSt('${activeDrv}','${f.k}')"><span class="status-btn-ico">${f.ico}</span>${f.l}</button>`).join("")}</div><div class="card"><div class="card-t">⛽ Fuel <span style="color:#DC2626;font-size:11px">*Required</span></div><div class="row2"><div class="form-group"><label>Start (L)</label><input type="number" id="fuel-start" placeholder="50" value="${r.fuel.start||""}"></div><div class="form-group"><label>End (L)</label><input type="number" id="fuel-end" placeholder="35" value="${r.fuel.end||""}"></div></div>${r.fuel.start&&r.fuel.end?`<div style="background:var(--apale);border-radius:9px;padding:8px;text-align:center;font-weight:700;color:var(--amber);margin-bottom:10px">Consumed: ${(r.fuel.start-r.fuel.end).toFixed(2)} L</div>`:""}${r.fuel.photo?`<img src="${r.fuel.photo}" style="width:100%;height:100px;object-fit:cover;border-radius:9px;margin-bottom:8px;border:1px solid var(--border)">`:""}<button class="btn btn-amber" onclick="openPhotoUpload('${activeDrv}','fuel')">📷 Fuel Photo</button></div><div class="card"><div class="card-t">🐾 Animal</div><div class="row2"><div class="form-group"><label>Type</label><select id="animal-type"><option value="">Select...</option>${ANIMALS.map(a=>`<option${r.animal.type===a?" selected":""}>${a}</option>`).join("")}</select></div><div class="form-group"><label>Condition</label><select id="animal-condition"><option value="">Select...</option>${CONDITIONS.map(c=>`<option${r.animal.condition===c?" selected":""}>${c}</option>`).join("")}</select></div></div><div class="row2"><div class="form-group"><label>Gender</label><select id="animal-gender"><option value="">Select...</option><option${r.animal.gender==="Male"?" selected":""}>Male</option><option${r.animal.gender==="Female"?" selected":""}>Female</option><option${r.animal.gender==="Unknown"?" selected":""}>Unknown</option></select></div><div class="form-group"><label>Neutered</label><select id="animal-neutered"><option value="">Select...</option><option${r.animal.neutered==="Yes"?" selected":""}>Yes</option><option${r.animal.neutered==="No"?" selected":""}>No</option><option${r.animal.neutered==="Unknown"?" selected":""}>Unknown</option></select></div></div><div class="form-group"><label>Remarks</label><textarea id="remarks">${r.animal.remarks||""}</textarea></div><button class="btn btn-green" onclick="saveDrvData('${activeDrv}')">💾 Save</button></div><div class="card"><div class="card-t">📸 Photos (${r.photos.length})</div>${r.photos.length>0?`<div class="photo-grid">${r.photos.map(p=>`<img src="${p.d}" alt="">`).join("")}</div>`:"<div style='text-align:center;padding:20px;color:var(--sub)'>No photos</div>"}<button class="btn btn-green" style="margin-top:8px" onclick="openPhotoUpload('${activeDrv}','photo')">📷 Add Photo</button></div></div>`;
+  document.getElementById("drv-view").innerHTML=html;
+  document.getElementById("tab-logout").style.display="none";
+}
+
+function render(){if(mode==="manager"&&mgrAuth)renderMgr();else renderDrv();}
+
+loadData().then(()=>{render();setInterval(loadData,10000);});
+</script>
+
+<script src="app.js"></script>
+</body>
+</html>

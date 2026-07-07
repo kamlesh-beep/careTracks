@@ -1,0 +1,29 @@
+# Node dependencies
+node_modules/
+
+# Logs
+npm-debug.log*
+*.log
+
+# Local env files
+.env
+.env.*
+
+# Local database / data file
+rescue_data.json
+
+# Build / OS files
+.DS_Store
+Thumbs.db
+
+# Editor directories
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Misc
+coverage/
+*.local
