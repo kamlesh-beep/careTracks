@@ -66,7 +66,7 @@ function App() {
 
   const loadData = async () => {
     try {
-      const response = await fetch('/api/data');
+      const response = await fetch('https://caretracks-api.onrender.com/api/data');
       if (response.ok) {
         const payload = await response.json();
         const next = { ...Object.fromEntries(DRIVERS.map((driver) => [driver, createState()])), ...payload };
@@ -113,7 +113,7 @@ function App() {
 
   const saveData = async (driver, state = data[driver]) => {
     try {
-      const response = await fetch('/api/save', {
+      const response = await fetch('https://caretracks-api.onrender.com/api/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ driver, state })
