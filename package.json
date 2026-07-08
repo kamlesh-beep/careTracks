@@ -4,10 +4,12 @@
   "description": "Simple rescue tracker backend for dashboard",
   "main": "api.js",
   "scripts": {
-    "start": "node api.js"
+    "start": "node api.js",
+    "migrate:firebase": "node migrate-json.js"
   },
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1"
+    ,"firebase-admin": "^13.4.0"
   }
 }
