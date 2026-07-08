@@ -8,6 +8,7 @@ npm-debug.log*
 # Local env files
 .env
 .env.*
+!.env.example
 
 # Local database / data file
 rescue_data.json
