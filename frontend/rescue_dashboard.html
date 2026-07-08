@@ -86,12 +86,7 @@ const FLOW=[{k:"enroute",ico:"🚚",l:"En Route"},{k:"onscene",ico:"📍",l:"On 
 const ANIMALS=["Dog","Cat","Bird","Cow","Goat","Snake","Monkey","Other"];
 const CONDITIONS=["Critical","Injured","Stable","Healthy"];
 const PWD="2289";
-const API=((()=>{
-  const fromQuery=new URLSearchParams(window.location.search).get("apiUrl");
-  const fromGlobal=window.__API_BASE__||window.__BACKEND_URL__;
-  const fallback=(window.location.hostname==="localhost"||window.location.hostname==="127.0.0.1")?"http://localhost:3001/api":`${window.location.origin}/api`;
-  return (fromQuery||fromGlobal||fallback).replace(/\/$/,'');
-})());
+const API="https://caretracks-api.onrender.com/api";
 
 function mkState(){return{status:"idle",vehicle:"",fuel:{start:"",end:"",photo:""},animal:{type:"",gender:"",neutered:"",condition:"",remarks:""},photos:[],tasks:[],history:[]};}
 let DATA={};DRIVERS.forEach(d=>DATA[d]=mkState());
